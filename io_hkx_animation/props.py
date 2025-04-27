@@ -54,6 +54,11 @@ class ArmatureProperties(bpy.types.PropertyGroup):
         #update=callbackfcn
     )
 
+    length_scale: bpy.props.FloatProperty(
+        name="Length scale",
+        description="Scale factor for length units",
+        default=1.0
+    )
 
 class BonePanel(bpy.types.Panel):
     """Panel for the Bone properties window"""
