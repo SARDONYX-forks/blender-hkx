@@ -24,6 +24,7 @@ class ArmaturePanel(bpy.types.Panel):
         return (context.object and context.object.type == 'ARMATURE')
     
     def draw(self, context):
+        self.layout.prop(context.object.data.iohkx, "length_scale")
         self.layout.prop(context.object.data.iohkx, "skeleton_path")
         
         #Is it stupid to show these here? 
