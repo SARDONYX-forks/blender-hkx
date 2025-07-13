@@ -24,12 +24,12 @@ class HKXIO(bpy.types.Operator):
     
     primary_skeleton: bpy.props.StringProperty(
         name="Primary skeleton",
-        description="Path to the HKX skeleton file",
+        description="Path to the HKX skeleton file (can be relative to .blend file)",
     )
     
     secondary_skeleton: bpy.props.StringProperty(
         name="Secondary skeleton",
-        description="Path to the skeleton of the second actor in a paired animation",
+        description="Path to the skeleton of the second actor in a paired animation (can be relative to .blend file)",
     )
     
     bone_forward: bpy.props.EnumProperty(
@@ -47,6 +47,32 @@ class HKXIO(bpy.types.Operator):
         default='Z',
         #update=callbackfcn
     )
+    
+    def resolve_skeleton_path(self, path):
+        """Convert relative paths to absolute paths based on the current .blend file location"""
+        if not path:
+            return path
+            
+        # If path is already absolute, return as-is
+        if os.path.isabs(path):
+            return path
+            
+        # Get the directory of the current .blend file
+        blend_filepath = bpy.data.filepath
+        if not blend_filepath:
+            # No .blend file is open, return path as-is
+            return path
+            
+        blend_dir = os.path.dirname(blend_filepath)
+        # Resolve the relative path
+        resolved_path = os.path.join(blend_dir, path)
+        return os.path.normpath(resolved_path)
+    
+    def get_resolved_skeleton_paths(self):
+        """Get both skeleton paths resolved to absolute paths"""
+        primary_resolved = self.resolve_skeleton_path(self.primary_skeleton)
+        secondary_resolved = self.resolve_skeleton_path(self.secondary_skeleton)
+        return primary_resolved, secondary_resolved
     
     def init_settings(self, context):
         #set skeleton path(s) to that of the active armature(s) (default if none)
@@ -149,7 +175,8 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
             
             #Invoke the converter
             tmp_file = _tmpfilename(self.filepath, context.preferences)
-            skels = '"%s" "%s"' % (self.primary_skeleton, self.secondary_skeleton)
+            primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
+            skels = '"%s" "%s"' % (primary_resolved, secondary_resolved)
             args = '"%s" unpack "%s" "%s" %s' % (tool, self.filepath, tmp_file, skels)
             
             try:
@@ -181,7 +208,8 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
                     obj.select_set(False)
                     
                 #create new armatures
-                paths = [self.primary_skeleton, self.secondary_skeleton]
+                primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
+                paths = [primary_resolved, secondary_resolved]
                 armatures = [self.import_skeleton(i, context, p) for i, p in zip(doc.skeletons, paths)]
                 if len(armatures) == 0:
                     raise RuntimeError("File contains no skeletons")
@@ -481,17 +509,18 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
                 raise RuntimeError("Select at most two Armatures")
             
             #Look for the skeleton(s)
-            if not os.path.exists(self.primary_skeleton):
-                raise RuntimeError("Primary skeleton file not found")
-            if len(armatures) > 1 and not os.path.exists(self.secondary_skeleton):
-                raise RuntimeError("Secondary skeleton file not found")
+            primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
+            if not os.path.exists(primary_resolved):
+                raise RuntimeError("Primary skeleton file not found: %s" % primary_resolved)
+            if len(armatures) > 1 and not os.path.exists(secondary_resolved):
+                raise RuntimeError("Secondary skeleton file not found: %s" % secondary_resolved)
             
             #Make sure we have frames to export
             if not self.frame_interval[1] > self.frame_interval[0]:
                 raise RuntimeError("Frame interval is empty")
             
             #Save our custom properties
-            for arma, path in zip(armatures, [self.primary_skeleton, self.secondary_skeleton]):
+            for arma, path in zip(armatures, [primary_resolved, secondary_resolved]):
                 arma.data.iohkx.length_scale = self.length_scale
                 arma.data.iohkx.skeleton_path = path
                 arma.data.iohkx.bone_forward = self.bone_forward
@@ -532,9 +561,9 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
                     
                     #invoke converter
                     if len(doc.animations) == 1:
-                        skels = '"%s"' % (self.primary_skeleton)
+                        skels = '"%s"' % (primary_resolved)
                     else:
-                        skels = '"%s" "%s"' % (self.primary_skeleton, self.secondary_skeleton)
+                        skels = '"%s" "%s"' % (primary_resolved, secondary_resolved)
                     
                     if self.output_format == 'LE':
                         fmt = "WIN32"
