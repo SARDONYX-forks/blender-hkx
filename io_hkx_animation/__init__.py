@@ -5,8 +5,8 @@ import io_hkx_animation.ops
 
 bl_info = {
     'name': "HKX Animation",
-    'author': "Jonas Gernandt",
-    'version': (0, 1, 0),
+    'author': "Jonas Gernandt/Beefclot/COACHWICKWACK",
+    'version': (1, 0, 0),
     'blender': (3, 1, 0),
     'location': "File > Import-Export",
     'description': "",

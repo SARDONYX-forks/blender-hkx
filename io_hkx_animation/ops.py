@@ -13,10 +13,18 @@ from io_hkx_animation.ixml import Track
 from io_hkx_animation.prefs import EXEC_NAME
 from io_hkx_animation.props import AXES
 
-SAMPLING_RATE = 30
+FRAMERATE_OPTIONS = [
+    ("30", "30 FPS", "Standard Havok framerate"),
+    ("60", "60 FPS", "High framerate for smoother animations"),
+    ("120", "120 FPS", "Very high framerate for ultra-smooth animations"),
+    ("240", "240 FPS", "Ultra high framerate for maximum smoothness"),
+]
+
+def get_sampling_rate(operator):
+    """Get the current sampling rate from the operator"""
+    return int(operator.framerate)
 
 class HKXIO(bpy.types.Operator):
-    
     length_scale: bpy.props.FloatProperty(
         name="Length scale",
         description="Scale factor for length units",
@@ -24,12 +32,12 @@ class HKXIO(bpy.types.Operator):
     
     primary_skeleton: bpy.props.StringProperty(
         name="Primary skeleton",
-        description="Path to the HKX skeleton file",
+        description="Path to the HKX skeleton file (can be relative to .blend file)",
     )
     
     secondary_skeleton: bpy.props.StringProperty(
         name="Secondary skeleton",
-        description="Path to the skeleton of the second actor in a paired animation",
+        description="Path to the skeleton of the second actor in a paired animation (can be relative to .blend file)",
     )
     
     bone_forward: bpy.props.EnumProperty(
@@ -48,6 +56,32 @@ class HKXIO(bpy.types.Operator):
         #update=callbackfcn
     )
     
+    def resolve_skeleton_path(self, path):
+        """Convert relative paths to absolute paths based on the current .blend file location"""
+        if not path:
+            return path
+            
+        # If path is already absolute, return as-is
+        if os.path.isabs(path):
+            return path
+            
+        # Get the directory of the current .blend file
+        blend_filepath = bpy.data.filepath
+        if not blend_filepath:
+            # No .blend file is open, return path as-is
+            return path
+            
+        blend_dir = os.path.dirname(blend_filepath)
+        # Resolve the relative path
+        resolved_path = os.path.join(blend_dir, path)
+        return os.path.normpath(resolved_path)
+    
+    def get_resolved_skeleton_paths(self):
+        """Get both skeleton paths resolved to absolute paths"""
+        primary_resolved = self.resolve_skeleton_path(self.primary_skeleton)
+        secondary_resolved = self.resolve_skeleton_path(self.secondary_skeleton)
+        return primary_resolved, secondary_resolved
+    
     def init_settings(self, context):
         #set skeleton path(s) to that of the active armature(s) (default if none)
         
@@ -55,6 +89,7 @@ class HKXIO(bpy.types.Operator):
         active = context.view_layer.objects.active
         
         if active and active.type == 'ARMATURE':
+            self.length_scale = active.data.iohkx.length_scale
             self.primary_skeleton = active.data.iohkx.skeleton_path
             self.bone_forward = active.data.iohkx.bone_forward
             self.bone_up = active.data.iohkx.bone_up
@@ -125,6 +160,13 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
         default="*.hkx",
         options={'HIDDEN'})
     
+    framerate: bpy.props.EnumProperty(
+        items=FRAMERATE_OPTIONS,
+        name="Animation Framerate",
+        description="Framerate for HKX animation import",
+        default="30",
+    )
+    
     framerot: mathutils.Matrix
     framerotinv: mathutils.Matrix
     
@@ -138,18 +180,21 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
             #setup axis conversion
             self.axis_conversion(from_forward=self.bone_forward, from_up=self.bone_up)
             
-            #Set fps to 30 (and warn if it wasn't)
-            if context.scene.render.fps != SAMPLING_RATE:
-                context.scene.render.fps = SAMPLING_RATE
-                self.report({'WARNING'}, "Setting framerate to %s fps" % str(SAMPLING_RATE))
+            #Set fps to sampling rate (and warn if it wasn't)
+            sampling_rate = get_sampling_rate(self)
+            if context.scene.render.fps != sampling_rate:
+                context.scene.render.fps = sampling_rate
+                self.report({'WARNING'}, "Setting framerate to %s fps" % str(sampling_rate))
             
             #Look for the converter
             tool = self.get_converter(context.preferences)
             
             #Invoke the converter
             tmp_file = _tmpfilename(self.filepath, context.preferences)
-            skels = '"%s" "%s"' % (self.primary_skeleton, self.secondary_skeleton)
-            args = '"%s" unpack "%s" "%s" %s' % (tool, self.filepath, tmp_file, skels)
+            primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
+            skels = '"%s" "%s"' % (primary_resolved, secondary_resolved)
+            sampling_rate = get_sampling_rate(self)
+            args = '"%s" unpack %s "%s" "%s" %s' % (tool, sampling_rate, self.filepath, tmp_file, skels)
             
             try:
                 res = subprocess.run(args)
@@ -180,7 +225,8 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
                     obj.select_set(False)
                     
                 #create new armatures
-                paths = [self.primary_skeleton, self.secondary_skeleton]
+                primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
+                paths = [primary_resolved, secondary_resolved]
                 armatures = [self.import_skeleton(i, context, p) for i, p in zip(doc.skeletons, paths)]
                 if len(armatures) == 0:
                     raise RuntimeError("File contains no skeletons")
@@ -331,6 +377,7 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
         context.scene.collection.objects.link(armature)
         
         #store our custom properties
+        data.iohkx.length_scale = self.length_scale
         data.iohkx.skeleton_path = path
         data.iohkx.bone_forward = self.bone_forward
         data.iohkx.bone_up = self.bone_up
@@ -430,6 +477,13 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
         options={'HIDDEN'},
     )
     
+    framerate: bpy.props.EnumProperty(
+        items=FRAMERATE_OPTIONS,
+        name="Animation Framerate",
+        description="Framerate for HKX animation export",
+        default="30",
+    )
+    
     blend_mode: bpy.props.BoolProperty(
         name="Additive",
         description="Store offsets instead of pose",
@@ -479,17 +533,19 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
                 raise RuntimeError("Select at most two Armatures")
             
             #Look for the skeleton(s)
-            if not os.path.exists(self.primary_skeleton):
-                raise RuntimeError("Primary skeleton file not found")
-            if len(armatures) > 1 and not os.path.exists(self.secondary_skeleton):
-                raise RuntimeError("Secondary skeleton file not found")
+            primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
+            if not os.path.exists(primary_resolved):
+                raise RuntimeError("Primary skeleton file not found: %s" % primary_resolved)
+            if len(armatures) > 1 and not os.path.exists(secondary_resolved):
+                raise RuntimeError("Secondary skeleton file not found: %s" % secondary_resolved)
             
             #Make sure we have frames to export
             if not self.frame_interval[1] > self.frame_interval[0]:
                 raise RuntimeError("Frame interval is empty")
             
             #Save our custom properties
-            for arma, path in zip(armatures, [self.primary_skeleton, self.secondary_skeleton]):
+            for arma, path in zip(armatures, [primary_resolved, secondary_resolved]):
+                arma.data.iohkx.length_scale = self.length_scale
                 arma.data.iohkx.skeleton_path = path
                 arma.data.iohkx.bone_forward = self.bone_forward
                 arma.data.iohkx.bone_up = self.bone_up
@@ -498,19 +554,20 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
             doc = DocumentInterface.create()
             
             #determine our sampling parameters
-            self.framestep = context.scene.render.fps / SAMPLING_RATE
+            sampling_rate = get_sampling_rate(self)
+            self.framestep = context.scene.render.fps / sampling_rate
             framesteps = self.frame_interval[1] - self.frame_interval[0]
         
-            #if framerate is not 30 fps, we sample at nearest possible rate and warn
-            if context.scene.render.fps != SAMPLING_RATE:
+            #if framerate is not at the sampling rate, we sample at nearest possible rate and warn
+            if context.scene.render.fps != sampling_rate:
                 framesteps = int(round(framesteps / self.framestep))
-                self.report({'WARNING'}, "Sampling animation at %s fps" % str(SAMPLING_RATE))
+                self.report({'WARNING'}, "Sampling animation at %s fps" % str(sampling_rate))
             
             self.frames = framesteps + 1
             
             #add frame, framerate, blend mode
             doc.set_frames(self.frames)
-            doc.set_framerate(SAMPLING_RATE)
+            doc.set_framerate(sampling_rate)
             doc.set_additive(self.blend_mode)
             
             #add animations
@@ -529,16 +586,17 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
                     
                     #invoke converter
                     if len(doc.animations) == 1:
-                        skels = '"%s"' % (self.primary_skeleton)
+                        skels = '"%s"' % (primary_resolved)
                     else:
-                        skels = '"%s" "%s"' % (self.primary_skeleton, self.secondary_skeleton)
+                        skels = '"%s" "%s"' % (primary_resolved, secondary_resolved)
                     
                     if self.output_format == 'LE':
                         fmt = "WIN32"
                     else:
                         fmt = "AMD64"
                     
-                    args = '"%s" pack %s "%s" "%s" %s' % (tool, fmt, tmp_file, self.filepath, skels)
+                    sampling_rate = get_sampling_rate(self)
+                    args = '"%s" pack %s %s "%s" "%s" %s' % (tool, sampling_rate, fmt, tmp_file, self.filepath, skels)
                     
                     res = subprocess.run(args)
                     
@@ -587,9 +645,10 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
         
         #loop over frames, add key for each track
         current_frame = context.scene.frame_current
+        sampling_rate = get_sampling_rate(self)
         for i in range(self.frames):
             #set current frame (and subframe, if appropriate)
-            if context.scene.render.fps == SAMPLING_RATE:
+            if context.scene.render.fps == sampling_rate:
                 context.scene.frame_set(self.frame_interval[0] + i)
             else:
                 subframe, frame = math.modf(self.frame_interval[0] + i * self.framestep)
