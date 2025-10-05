@@ -2,8 +2,6 @@
 #include "AnimationDecoder.h"
 #include "TrackMapper.h"
 
-constexpr int FRAME_RATE = 30;
-
 using namespace iohkx;
 
 //Transform the bone and its descendants to parent-space transform T
@@ -93,7 +91,7 @@ static void sanitiseQuats(Clip& clip)
 	}
 }
 
-iohkx::AnimationDecoder::AnimationDecoder()
+iohkx::AnimationDecoder::AnimationDecoder() : m_frameRate(30)
 {}
 
 iohkx::AnimationDecoder::~AnimationDecoder()
@@ -111,7 +109,7 @@ hkRefPtr<hkaAnimationContainer> iohkx::AnimationDecoder::compress()
 		//Nothing to compress
 		return hkRefPtr<hkaAnimationContainer>();
 
-	if (m_data.frameRate != FRAME_RATE)
+	if (m_data.frameRate != m_frameRate)
 		throw Exception(ERR_INVALID_INPUT, "Unsupported frame rate");
 
 	preProcess();
@@ -198,7 +196,7 @@ hkRefPtr<hkaAnimationContainer> iohkx::AnimationDecoder::compress()
 		if (map.m_annotationTracks[i] != -1) {
 			for (auto&& anno : m_data.clips[i].annotations) {
 				hkaAnnotationTrack::Annotation a;
-				a.m_time = static_cast<float>(anno.frame) / FRAME_RATE;
+				a.m_time = static_cast<float>(anno.frame) / m_frameRate;
 				a.m_text = anno.text.c_str();
 				raw->m_annotationTracks[map.m_annotationTracks[i]].m_annotations.pushBack(a);
 			}
@@ -240,7 +238,7 @@ void iohkx::AnimationDecoder::decompress(
 {
 	//Init to a meaningful state, whether we are being reused or not
 	m_data.frames = 0;
-	m_data.frameRate = 30;
+	m_data.frameRate = m_frameRate;
 	m_data.additive = false;
 	m_data.clips.clear();
 
@@ -259,8 +257,8 @@ void iohkx::AnimationDecoder::decompress(
 		return;
 
 	//Set frame count, framerate, blend mode
-	m_data.frames = static_cast<int>(std::round(anim->m_duration * FRAME_RATE)) + 1;
-	m_data.frameRate = FRAME_RATE;
+	m_data.frames = static_cast<int>(std::round(anim->m_duration * m_frameRate)) + 1;
+	m_data.frameRate = m_frameRate;
 	m_data.additive = binding->m_blendHint == hkaAnimationBinding::ADDITIVE;
 
 	//Init the key arrays
@@ -277,7 +275,7 @@ void iohkx::AnimationDecoder::decompress(
 	hkArray<hkQsTransform> tmpT(anim->m_numberOfTransformTracks);
 	hkArray<hkReal> tmpF(anim->m_numberOfFloatTracks);
 	for (int f = 0; f < m_data.frames; f++) {
-		anim->sampleTracks((float)f / FRAME_RATE, tmpT.begin(), tmpF.begin(), HK_NULL);
+		anim->sampleTracks((float)f / m_frameRate, tmpT.begin(), tmpF.begin(), HK_NULL);
 
 		//convert tmpT to bone space
 		for (int i = 0; i < tmpT.getSize(); i++) {
@@ -319,7 +317,7 @@ void iohkx::AnimationDecoder::decompress(
 		for (auto&& item : anim->m_annotationTracks[map.m_annotationTrack].m_annotations) {
 			//(convert time to frame)
 			m_data.clips[map.m_annotationClip].annotations.push_back({
-				static_cast<int>(std::round(item.m_time * FRAME_RATE)),
+				static_cast<int>(std::round(item.m_time * m_frameRate)),
 				item.m_text.cString() });
 		}
 	}

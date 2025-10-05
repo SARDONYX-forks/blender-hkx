@@ -1,5 +1,6 @@
 #include "pch.h"
 
+#include <cstdlib>
 #include "common.h"
 #include "AnimationDecoder.h"
 #include "HKXInterface.h"
@@ -31,30 +32,37 @@ pugixml is Copyright 2006-2019 Arseny Kapoulkine.\n";
 void unpack(int argc, char* const* argv)
 {
 	//args
+	//0. framerate
 	//1. hkx file name
 	//2. output xml
 	//3+. skeleton(s)
-	if (argc >= 3) {
+	if (argc >= 4) {
+		int frameRate = std::atoi(argv[0]);
+		if (frameRate != 30 && frameRate != 60 && frameRate != 120 && frameRate != 240) {
+			throw Exception(ERR_INVALID_ARGS, "Framerate must be 30, 60, 120, or 240");
+		}
+
 		HavokEngine engine;
 		HKXInterface hkx;
 
 		SkeletonLoader skeletons;
 
-		for (int i = 0; i < argc - 2; i++) {
-			hkRefPtr<hkaAnimationContainer> res = hkx.load(argv[i + 2]);
+		for (int i = 0; i < argc - 3; i++) {
+			hkRefPtr<hkaAnimationContainer> res = hkx.load(argv[i + 3]);
 			if (res)
 				skeletons.load(res.val());
 		}
 		if (skeletons.empty())
 			throw Exception(ERR_INVALID_INPUT, "No skeleton found");
 
-		hkRefPtr<hkaAnimationContainer> anim = hkx.load(argv[0]);
+		hkRefPtr<hkaAnimationContainer> anim = hkx.load(argv[1]);
 
 		AnimationDecoder animation;
+		animation.setFrameRate(frameRate);
 		animation.decompress(anim, skeletons.get());
 
 		XMLInterface xml;
-		xml.write(animation.get(), argv[1]);
+		xml.write(animation.get(), argv[2]);
 	}
 	else
 		throw Exception(ERR_INVALID_ARGS, "Missing arguments");
@@ -63,18 +71,24 @@ void unpack(int argc, char* const* argv)
 void pack(int argc, char* const* argv)
 {
 	//args
+	//0. framerate
 	//1. format specifier
 	//2. input xml
 	//3. output file name
 	//4+. skeleton(s)
-	if (argc >= 4) {
+	if (argc >= 5) {
+		int frameRate = std::atoi(argv[0]);
+		if (frameRate != 30 && frameRate != 60 && frameRate != 120 && frameRate != 240) {
+			throw Exception(ERR_INVALID_ARGS, "Framerate must be 30, 60, 120, or 240");
+		}
+
 		HavokEngine engine;
 		HKXInterface hkx;
 
 		SkeletonLoader skeleton;
 
-		for (int i = 0; i < argc - 3; i++) {
-			hkRefPtr<hkaAnimationContainer> res = hkx.load(argv[i + 3]);
+		for (int i = 0; i < argc - 4; i++) {
+			hkRefPtr<hkaAnimationContainer> res = hkx.load(argv[i + 4]);
 			if (res)
 				skeleton.load(res.val());
 		}
@@ -82,22 +96,23 @@ void pack(int argc, char* const* argv)
 			throw Exception(ERR_INVALID_INPUT, "No skeleton found");
 
 		AnimationDecoder animation;
+		animation.setFrameRate(frameRate);
 
 		XMLInterface xml;
-		xml.read(argv[1], skeleton.get(), animation.get());
+		xml.read(argv[2], skeleton.get(), animation.get());
 
 		hkRefPtr<hkaAnimationContainer> anim = animation.compress();
 
-		if (_stricmp(argv[0], "WIN32") == 0) {
+		if (_stricmp(argv[1], "WIN32") == 0) {
 			hkx.m_options.layout = LAYOUT_WIN32;
 		}
-		else if (_stricmp(argv[0], "XML") == 0) {
+		else if (_stricmp(argv[1], "XML") == 0) {
 			hkx.m_options.textFormat = true;
 		}
 		else {
 			hkx.m_options.layout = LAYOUT_AMD64;
 		}
-		hkx.save(anim.val(), argv[2]);
+		hkx.save(anim.val(), argv[3]);
 	}
 	else
 		throw Exception(ERR_INVALID_ARGS, "Missing arguments");
