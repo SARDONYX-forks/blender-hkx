@@ -196,6 +196,55 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
         self.init_settings(context)
         return bpy_extras.io_utils.ImportHelper.invoke(self, context, event)
 
+    def ensure_unpackable_hkx(self, context):
+        """
+        Returns unpackable HKX path
+        Create a converted temporary file if necessary
+        Return value: (filepath, cleanup_func)
+        """
+
+        def noop():
+            pass
+
+        src = self.filepath
+
+        with open(src, "rb") as f:
+            f.seek(16)
+            b = f.read(1)
+            if not b:
+                raise RuntimeError("Invalid HKX file")
+
+        if b[0] != 8:  # hkx is win32?
+            return src, noop
+
+        pref = context.preferences.addons[__package__].preferences.converter_tool
+        exe = os.path.join(os.path.dirname(pref), "hkxc.exe")
+        if not os.path.exists(exe):
+            raise RuntimeError(
+                "Converter tool not found. Check your Addon Preferences."
+            )
+        tmp_hkx = _tmpfilename(src, context.preferences, suffix=".hkx")
+
+        subprocess.run(
+            [
+                exe,
+                "convert",
+                "-i",
+                src,
+                "-o",
+                tmp_hkx,
+                "-v",
+                "win32",
+            ],
+            check=True,
+        )
+
+        def cleanup():
+            if os.path.exists(tmp_hkx):
+                os.remove(tmp_hkx)
+
+        return tmp_hkx, cleanup
+
     def execute(self, context):
         try:
             # setup axis conversion
@@ -214,13 +263,14 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
 
             # Invoke the converter
             tmp_file = _tmpfilename(self.filepath, context.preferences)
+            unpack_path, cleanup = self.ensure_unpackable_hkx(context)
             primary_resolved, secondary_resolved = self.get_resolved_skeleton_paths()
             skels = '"%s" "%s"' % (primary_resolved, secondary_resolved)
             sampling_rate = get_sampling_rate(self)
             args = '"%s" unpack %s "%s" "%s" %s' % (
                 tool,
                 sampling_rate,
-                self.filepath,
+                unpack_path,
                 tmp_file,
                 skels,
             )
@@ -235,6 +285,7 @@ class HKXImport(HKXIO, bpy_extras.io_utils.ImportHelper):
                 doc = DocumentInterface.open(tmp_file)
 
             finally:
+                cleanup()
                 if os.path.exists(tmp_file):
                     os.remove(tmp_file)
 
@@ -818,7 +869,7 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
                     ianim.add_annotation(i, marker.name)
 
 
-def _tmpfilename(file_name, preferences):
+def _tmpfilename(file_name: str, preferences: bpy.types.Preferences, suffix=".tmp"):
     # read dir from preferences
     loc = preferences.addons[__package__].preferences.temp_location
 
@@ -826,9 +877,9 @@ def _tmpfilename(file_name, preferences):
     if loc == "":
         loc = preferences.addons[__package__].preferences.converter_tool
 
-    root, ext = os.path.splitext(os.path.basename(file_name))
-    # return loc/fileroot.tmp
-    return os.path.join(loc, root) + ".tmp"
+    root, _ext = os.path.splitext(os.path.basename(file_name))
+
+    return os.path.join(loc, root + suffix)
 
 
 def exportop(self, context):

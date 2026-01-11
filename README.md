@@ -2,6 +2,14 @@
 
 An addon for Blender 5.0 to import/export Skyrim animations (HKX files)
 
+64-bit HKX files are also automatically converted and loaded using `serde-hkx`.
+
+```txt
+converter/          <- Converter dir
+  ├─ blender-hkx.exe
+  └─ hkxc.exe
+```
+
 ## Note
 
 This addon requires the use of Havok software, which I do not have permission to redistribute. To use it, you need to gain access to the Havok SDK and build the C++ source code yourself.
