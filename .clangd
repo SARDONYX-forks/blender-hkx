@@ -1,0 +1,31 @@
+CompileFlags:
+  Add: [
+      #
+      "-Wall",
+      "-Wextra",
+      "-Wno-c++98-compat",
+      "-Wunused",
+      "/std:c++11",
+    ]
+
+Diagnostics:
+  UnusedIncludes: Strict
+  ClangTidy:
+    Add: [
+        #
+        bugprone-*,
+        cert-*,
+        modernize-*,
+        performance-*,
+
+        misc-*,
+        clang-diagnostic-*,
+        clang-analyzer-*,
+        cppcoreguidelines-*,
+      ]
+    Remove: [
+        #
+        bugprone-easily-swappable-parameters,
+        modernize-use-trailing-return-type,
+        performance-enum-size,
+      ]

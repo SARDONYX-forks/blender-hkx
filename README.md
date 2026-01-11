@@ -1,11 +1,15 @@
 # blender-hkx
-An addon for Blender 3.2 to import/export Skyrim animations (HKX files)
+
+An addon for Blender 5.0 to import/export Skyrim animations (HKX files)
 
 ## Note
+
 This addon requires the use of Havok software, which I do not have permission to redistribute. To use it, you need to gain access to the Havok SDK and build the C++ source code yourself.
 
 ## About
+
 This is a complete solution for importing and exporting Skyrim animations to and from Blender. It can handle:
+
 - Regular animations
 - Paired animations
 - Additive animations
@@ -21,6 +25,7 @@ The converter can only read 32 bit HKX files (original Skyrim), but it can write
 Havok expects animations to be sampled at 30 fps. If you have created an animation with a different frame rate, it may not turn out exactly the same as it looks in Blender.
 
 ## Import
+
 Located in File>Import.
 
 If an Armature object is selected, the animation will be added to it. Otherwise, an Armature object will be imported along with the animation.
@@ -32,6 +37,7 @@ Any annotations in the animation will be imported as Pose Markers (can be enable
 Any float tracks in the animation will be imported as custom properties on the Armature object.
 
 ## Export
+
 Located in File>Export.
 
 Select one or two armatures, enter Pose mode and select all the bones that should be exported. The exporter uses the final visible pose (i. e. after constraints and drivers).
@@ -45,7 +51,9 @@ Any Pose Markers in the current Action of the selected Armature object will be e
 Any custom properties on the Armature object will be exported as float tracks, if they are keyframed in the current Action.
 
 ## Build instructions
+
 To build the converter tool from source, you need:
+
 - Visual Studio 2019
 - Havok SDK 2010 2.0-r1
 - pugixml
