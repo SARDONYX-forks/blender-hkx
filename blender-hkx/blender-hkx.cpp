@@ -70,6 +70,25 @@ void unpack(int argc, char* const* argv)
 
 void pack(int argc, char* const* argv)
 {
+	//optional flags (may appear anywhere, are removed before positional parsing)
+	//--legacy-tolerance	use the spline compression tolerances of versions prior to 0.2.0
+	AnimationDecoder::TolerancePreset tolerance = AnimationDecoder::TOLERANCE_PRECISE;
+
+	std::vector<char*> positional;
+	positional.reserve(argc);
+	for (int i = 0; i < argc; i++) {
+		if (std::strncmp(argv[i], "--", 2) == 0) {
+			if (std::strcmp(argv[i], "--legacy-tolerance") == 0)
+				tolerance = AnimationDecoder::TOLERANCE_LEGACY;
+			else
+				throw Exception(ERR_INVALID_ARGS, "Unknown option (expected --legacy-tolerance)");
+		}
+		else
+			positional.push_back(argv[i]);
+	}
+	argc = static_cast<int>(positional.size());
+	argv = positional.data();
+
 	//args
 	//0. framerate
 	//1. format specifier
@@ -97,6 +116,7 @@ void pack(int argc, char* const* argv)
 
 		AnimationDecoder animation;
 		animation.setFrameRate(frameRate);
+		animation.setTolerance(tolerance);
 
 		XMLInterface xml;
 		xml.read(argv[2], skeleton.get(), animation.get());

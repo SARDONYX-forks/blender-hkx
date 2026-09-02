@@ -211,10 +211,18 @@ hkRefPtr<hkaAnimationContainer> iohkx::AnimationDecoder::compress()
 		acp.m_enableSampleSingleTracks = true;
 
 	hkaSplineCompressedAnimation::TrackCompressionParams tcp;
-	tcp.m_translationTolerance = 0.004f;
-	tcp.m_rotationTolerance = 0.001f;
-	tcp.m_scaleTolerance = 0.004f;
-	tcp.m_floatingTolerance = 0.004f;
+	if (m_tolerance == TOLERANCE_LEGACY) {
+		tcp.m_translationTolerance = 0.004f;
+		tcp.m_rotationTolerance = 0.001f;
+		tcp.m_scaleTolerance = 0.004f;
+		tcp.m_floatingTolerance = 0.004f;
+	}
+	else {
+		tcp.m_translationTolerance = 0.0001f;
+		tcp.m_rotationTolerance = 0.0001f;
+		tcp.m_scaleTolerance = 0.0001f;
+		tcp.m_floatingTolerance = 0.0001f;
+	}
 
 	tcp.m_translationQuantizationType = hkaSplineCompressedAnimation::TrackCompressionParams::BITS8;
 	tcp.m_rotationQuantizationType = hkaSplineCompressedAnimation::TrackCompressionParams::THREECOMP40;
