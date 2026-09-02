@@ -642,6 +642,15 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
         default="SE",
     )
 
+    legacy_tolerance: bpy.props.BoolProperty(
+        name="Legacy compression tolerance",
+        description=(
+            "Use the looser spline compression tolerances of earlier versions "
+            "(smaller files, lower precision)"
+        ),
+        default=False,
+    )
+
     framerot: mathutils.Matrix
     framerotinv: mathutils.Matrix
 
@@ -756,6 +765,8 @@ class HKXExport(HKXIO, bpy_extras.io_utils.ExportHelper):
                         self.filepath,
                         skels,
                     )
+                    if self.legacy_tolerance:
+                        args += " --legacy-tolerance"
 
                     res = subprocess.run(args)
 
